@@ -1,52 +1,57 @@
 import json
-import os
 from datetime import datetime
 from astrbot.api.event import filter, AstrMessageEvent, MessageChain
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 import astrbot.api.message_components as Comp
 import threading
+import asyncio
+from astrbot.api.star import StarTools
 
-# 全局数据管理
+# 线程锁
+LOCK = threading.Lock()
+
 class BossData:
     """Boss 数据管理，包含订阅列表和头目信息"""
-    LOCK = threading.Lock()
-
     def __init__(self):
-        self.DATA_DIR = "data"
-        self.DATA_FILE = os.path.join(self.DATA_DIR, "boss_data.json")
+        # 使用 StarTools 获取插件专属数据目录
+        self.data_dir = StarTools.get_data_dir("astrbot_plugin_boss_notifier")
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_file = self.data_dir / "boss_data.json"
         self.data = {"subscriptions": [], "boss": {}}
         self.load_data()
 
     def load_data(self):
-        if not os.path.exists(self.DATA_DIR):
-            os.makedirs(self.DATA_DIR)
-        if os.path.exists(self.DATA_FILE):
+        """从文件加载数据"""
+        if self.data_file.exists():
             try:
-                with open(self.DATA_FILE, "r", encoding="utf-8") as f:
+                with open(self.data_file, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
+                logger.info("Boss 数据加载成功")
             except Exception as e:
-                logger.warning(f"读取数据失败: {e}")
+                logger.warning(f"Boss 数据加载失败: {e}")
                 self.data = {"subscriptions": [], "boss": {}}
 
     def save_data(self):
+        """保存数据到文件"""
         try:
-            with self.LOCK:
-                with open(self.DATA_FILE, "w", encoding="utf-8") as f:
+            with LOCK:
+                with open(self.data_file, "w", encoding="utf-8") as f:
                     json.dump(self.data, f, ensure_ascii=False, indent=2)
+            logger.info("Boss 数据保存成功")
         except Exception as e:
-            logger.error(f"保存数据失败: {e}")
+            logger.error(f"Boss 数据保存失败: {e}")
 
     def add_subscription(self, user_id):
         user_id = str(user_id)
         if user_id not in self.data["subscriptions"]:
-            self.data["subscriptions"].append(str(user_id))
+            self.data["subscriptions"].append(user_id)
             self.save_data()
 
     def remove_subscription(self, user_id):
         user_id = str(user_id)
         if user_id in self.data["subscriptions"]:
-            self.data["subscriptions"].remove(str(user_id))
+            self.data["subscriptions"].remove(user_id)
             self.save_data()
 
     def update_boss(self, place, name, iv, nature, feature, time_str=None):
@@ -86,16 +91,12 @@ class BossNotifier(Star):
         super().__init__(context)
 
     @filter.command("订阅头目")
-    async def subscribe(self, event: AstrMessageEvent, target_qq: str = None):
+    async def subscribe(self, event: AstrMessageEvent):
         """
-        /订阅头目 [QQ号]：订阅当前QQ号或指定QQ号
+        /订阅头目 ：订阅当前QQ号
         """
-        # 如果没有指定QQ，默认订阅自己
-        if not target_qq:
-            target_qq = str(event.get_sender_id())
-        else:
-            target_qq = str(target_qq)
 
+        target_qq = str(event.get_sender_id())
         boss_data.add_subscription(target_qq)
 
         chain = [
@@ -105,16 +106,12 @@ class BossNotifier(Star):
         await self.context.send_message(event.unified_msg_origin, MessageChain(chain))
 
     @filter.command("取消订阅")
-    async def unsubscribe(self, event: AstrMessageEvent, target_qq: str = None):
+    async def unsubscribe(self, event: AstrMessageEvent):
         """
-        /取消订阅 [QQ号]：取消订阅当前QQ号或指定QQ号
+        /取消订阅 ：取消订阅当前QQ号
         """
-        # 如果没有指定QQ，默认取消自己
-        if not target_qq:
-            target_qq = str(event.get_sender_id())
-        else:
-            target_qq = str(target_qq)
 
+        target_qq = str(event.get_sender_id())
         boss_data.remove_subscription(target_qq)
 
         chain = [
@@ -164,6 +161,6 @@ class BossNotifier(Star):
             "/更新头目：地点 精灵 个体 性格 特性 [时间可选]\n"
             "/订阅列表 （查询订阅列表）\n"
             "/头目来了 （提醒所有订阅者）\n\n"
-            "更新头目例子：\n/更新头目：第1星系 火山3层 赤西西比 29 孤独 圣灵 2025/08/29-10:00"
+            "更新头目例子：\n/更新头目 第1星系-火山3层 赤西西比 29 孤独 圣灵 2025/08/29-10:00"
         )
         yield event.plain_result(md + "\n\n" + usage)
