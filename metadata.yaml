@@ -1,0 +1,5 @@
+name: astrbot_plugin_boss_notifier
+desc: "AstrBot头目通知插件，可更新头目信息并通知订阅者"
+version: v1.0.0
+author: Alent7
+repo: https://github.com/Alent7/astrbot_plugin_boss_notifier
