@@ -4,6 +4,8 @@ AstrBot 插件：头目订阅提醒插件
 
 ---
 
+发布地址：https://bbs.seerxin.com/forum.php?mod=viewthread&tid=51287&page=1#pid227286
+
 ## 功能概述
 
 - 用户订阅/取消头目刷新提醒  
